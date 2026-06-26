@@ -1,10 +1,8 @@
 # ==============================================
 # 🚀 CREATE FB BY UCUK - TANPA PROXY
 # ✅ Khusus Testing di Vercel
-# ✅ Tampilan Aplikasi HP
-# ✅ Ada Simulasi Proses
-# ✅ Bisa Atur Jumlah Akun
-# ✅ Pakai Temp-Mail.org
+# ✅ Pakai 1secmail.com (Lebih Stabil)
+# ✅ Tampilan Aplikasi HP + Simulasi Proses
 # ==============================================
 import time
 import random
@@ -19,8 +17,8 @@ app.config["JSON_SORT_KEYS"] = False
 # ==================== KONFIGURASI ====================
 URL_DAFTAR_FB = "https://m.facebook.com/r.php"
 
-# API Temp-Mail.org
-API_TM = "https://api.temp-mail.org/request"
+# API 1secmail.com (Lebih stabil untuk Vercel)
+API_1SEC = "https://www.1secmail.com/api/v1/"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Linux; Android 13; SM-G991B) Chrome/126.0.0.0 Mobile Safari/537.36",
@@ -31,29 +29,41 @@ HEADERS = {
 DAFTAR_NAMA = ["Budi","Andi","Rizky","Dika","Joko","Agus","Hendra","Fajar","Rian","Deni","Sari","Dewi","Lina","Rina"]
 s = requests.Session()
 
-# ==================== FUNGSI EMAIL ====================
-def buat_email_tm():
+# ==================== FUNGSI EMAIL (1SECMAIL) ====================
+def buat_email():
     try:
-        res = requests.get(f"{API_TM}/mail/id/1/format/json", headers=HEADERS, timeout=5)
-        if res.status_code == 200:
-            return True, res.json()["mail"]
-        return False, "❌ Gagal buat email"
+        # Ambil domain acak
+        res = requests.get(f"{API_1SEC}?action=getDomainList", timeout=5)
+        if res.status_code != 200:
+            return False, "❌ Gagal dapat domain email"
+        domain = random.choice(res.json())
+        nama = f"ucuk{random.randint(10000,99999)}"
+        email = f"{nama}@{domain}"
+        return True, {"email": email, "login": nama, "domain": domain}
     except:
         return False, "❌ Koneksi ke layanan email gagal"
 
-def cek_otp(email):
+def cek_pesan(login, domain):
     try:
-        res = requests.get(f"{API_TM}/messages/mail/{email}/format/json", headers=HEADERS, timeout=4)
+        res = requests.get(f"{API_1SEC}?action=getMessages&login={login}&domain={domain}", timeout=5)
         if res.status_code == 200 and res.json():
-            msg = res.json()[0]
-            baca = requests.get(f"{API_TM}/read/mail/{email}/id/{msg['id']}/format/json", headers=HEADERS, timeout=4)
-            if baca.status_code == 200:
-                isi = baca.json().get("mail_body", "")
-                kode = re.search(r"\b\d{5,6}\b", isi)
-                return kode.group() if kode else "Tidak ditemukan"
-        return "Belum masuk"
+            return True, res.json()
+        return False, []
     except:
-        return "Gagal cek"
+        return False, []
+
+def baca_kode_otp(login, domain, pesan_id):
+    try:
+        res = requests.get(f"{API_1SEC}?action=readMessage&login={login}&domain={domain}&id={pesan_id}", timeout=5)
+        if res.status_code == 200:
+            isi = res.json().get("body", "")
+            subjek = res.json().get("subject", "")
+            cari = f"{subjek} {isi}"
+            kode = re.search(r"\b\d{5,6}\b", cari)
+            return kode.group() if kode else "Tidak ditemukan"
+        return "Gagal baca pesan"
+    except:
+        return "Error"
 
 # ==================== FUNGSI DAFTAR FB ====================
 def buat_data_akun():
@@ -230,22 +240,28 @@ def index():
 
 @app.route("/buat")
 def buat_satu():
-    ok_email, email = buat_email_tm()
+    # Buat email baru
+    ok_email, data_email = buat_email()
     if not ok_email:
-        return jsonify({"status": "gagal", "pesan": email})
+        return jsonify({"status": "gagal", "pesan": data_email})
     
+    # Buat data akun
     data_akun = buat_data_akun()
-    sukses, keterangan = daftar_fb(data_akun, email)
+    
+    # Daftar ke FB
+    sukses, keterangan = daftar_fb(data_akun, data_email["email"])
     
     otp = ""
     if "verifikasi" in keterangan.lower():
-        time.sleep(2)
-        otp = cek_otp(email)
+        time.sleep(3)
+        ok_pesan, daftar_pesan = cek_pesan(data_email["login"], data_email["domain"])
+        if ok_pesan and daftar_pesan:
+            otp = baca_kode_otp(data_email["login"], data_email["domain"], daftar_pesan[0]["id"])
     
     return jsonify({
         "status": "berhasil" if sukses else "gagal",
         "pesan": "",
-        "email": email,
+        "email": data_email["email"],
         "sandi": data_akun["sandi"],
         "ket": keterangan,
         "otp": otp
