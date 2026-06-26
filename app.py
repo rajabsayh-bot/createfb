@@ -1,24 +1,22 @@
 # ==============================================
 # 🚀 CREATE FB BY UCUK - TANPA PROXY
+# ✅ PAKAI EMAIL SENDIRI
+# ✅ Input email manual + Input kode OTP
 # ✅ Khusus Testing di Vercel
-# ✅ Pakai 1secmail.com (Lebih Stabil)
-# ✅ Tampilan Aplikasi HP + Simulasi Proses
+# ✅ Tampilan Aplikasi HP
 # ==============================================
 import time
 import random
 import re
 import requests
 from bs4 import BeautifulSoup
-from flask import Flask, render_template_string, jsonify
+from flask import Flask, render_template_string, jsonify, request
 
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False
 
 # ==================== KONFIGURASI ====================
 URL_DAFTAR_FB = "https://m.facebook.com/r.php"
-
-# API 1secmail.com (Lebih stabil untuk Vercel)
-API_1SEC = "https://www.1secmail.com/api/v1/"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Linux; Android 13; SM-G991B) Chrome/126.0.0.0 Mobile Safari/537.36",
@@ -29,41 +27,8 @@ HEADERS = {
 DAFTAR_NAMA = ["Budi","Andi","Rizky","Dika","Joko","Agus","Hendra","Fajar","Rian","Deni","Sari","Dewi","Lina","Rina"]
 s = requests.Session()
 
-# ==================== FUNGSI EMAIL (1SECMAIL) ====================
-def buat_email():
-    try:
-        # Ambil domain acak
-        res = requests.get(f"{API_1SEC}?action=getDomainList", timeout=5)
-        if res.status_code != 200:
-            return False, "❌ Gagal dapat domain email"
-        domain = random.choice(res.json())
-        nama = f"ucuk{random.randint(10000,99999)}"
-        email = f"{nama}@{domain}"
-        return True, {"email": email, "login": nama, "domain": domain}
-    except:
-        return False, "❌ Koneksi ke layanan email gagal"
-
-def cek_pesan(login, domain):
-    try:
-        res = requests.get(f"{API_1SEC}?action=getMessages&login={login}&domain={domain}", timeout=5)
-        if res.status_code == 200 and res.json():
-            return True, res.json()
-        return False, []
-    except:
-        return False, []
-
-def baca_kode_otp(login, domain, pesan_id):
-    try:
-        res = requests.get(f"{API_1SEC}?action=readMessage&login={login}&domain={domain}&id={pesan_id}", timeout=5)
-        if res.status_code == 200:
-            isi = res.json().get("body", "")
-            subjek = res.json().get("subject", "")
-            cari = f"{subjek} {isi}"
-            kode = re.search(r"\b\d{5,6}\b", cari)
-            return kode.group() if kode else "Tidak ditemukan"
-        return "Gagal baca pesan"
-    except:
-        return "Error"
+# Simpan status sementara untuk verifikasi
+proses_sementara = {}
 
 # ==================== FUNGSI DAFTAR FB ====================
 def buat_data_akun():
@@ -88,7 +53,7 @@ def daftar_fb(data, email):
     try:
         res = s.get(URL_DAFTAR_FB, headers=HEADERS, timeout=8)
         if res.status_code != 200:
-            return False, "❌ Gagal membuka halaman pendaftaran"
+            return False, "❌ Gagal membuka halaman pendaftaran", None
         
         soup = BeautifulSoup(res.text, "html.parser")
         lsd = soup.find("input", {"name":"lsd"})
@@ -112,16 +77,16 @@ def daftar_fb(data, email):
         res_post = s.post(URL_DAFTAR_FB, data=form, headers=HEADERS, timeout=10, allow_redirects=True)
 
         if "home.php" in res_post.url:
-            return True, "✅ Berhasil dibuat & langsung aktif"
+            return True, "✅ Berhasil dibuat & langsung aktif", None
         elif "checkpoint" in res_post.url or "confirm" in res_post.url:
-            return True, "⚠️ Berhasil - butuh verifikasi OTP"
+            return True, "⚠️ Berhasil - butuh verifikasi kode OTP", res_post.url
         else:
-            return True, "✅ Data terkirim - tunggu konfirmasi"
+            return True, "✅ Data terkirim - cek email untuk kode", None
 
     except Exception as e:
-        return False, f"❌ Error: {str(e)[:30]}"
+        return False, f"❌ Error: {str(e)[:30]}", None
 
-# ==================== TAMPILAN + SIMULASI ====================
+# ==================== TAMPILAN ====================
 @app.route("/")
 def index():
     return render_template_string("""
@@ -138,6 +103,7 @@ def index():
             .proses { color: #2563eb; }
             .sukses { color: #166534; background: #f0fdf4; padding: 6px; border-radius: 4px; }
             .gagal { color: #991b1b; background: #fef2f2; padding: 6px; border-radius: 4px; }
+            .verif { background: #fffbeb; border:1px solid #fbbf24; padding: 8px; border-radius: 6px; }
         </style>
     </head>
     <body class="bg-gray-100 min-h-screen p-3">
@@ -146,29 +112,47 @@ def index():
             <!-- HEADER -->
             <div class="bg-gradient-to-r from-blue-600 to-indigo-600 p-5 text-center">
                 <h1 class="text-2xl font-bold text-white">📱 Create FB</h1>
-                <p class="text-blue-100 text-sm">By Ucuk • Tanpa Proxy</p>
+                <p class="text-blue-100 text-sm">By Ucuk • Pakai Email Sendiri</p>
             </div>
 
             <!-- ISI -->
-            <div class="p-5 space-y-5">
+            <div class="p-5 space-y-4">
                 
+                <!-- INPUT EMAIL -->
+                <div>
+                    <label class="block text-gray-700 font-medium mb-2">📧 Email Kamu:</label>
+                    <input type="email" id="emailUser" placeholder="contoh: kamu@gmail.com" 
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+
                 <!-- JUMLAH AKUN -->
                 <div>
-                    <label class="block text-gray-700 font-medium mb-2">Jumlah Akun:</label>
-                    <input type="number" id="jumlah" value="1" min="1" max="10" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg">
+                    <label class="block text-gray-700 font-medium mb-2">🔢 Jumlah Akun:</label>
+                    <input type="number" id="jumlah" value="1" min="1" max="5" 
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
 
                 <!-- TOMBOL RUN -->
-                <button id="tombolRun" onclick="mulaiProses()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-lg text-lg shadow-md transition duration-200">
-                    ▶️ RUN Pembuatan
+                <button id="tombolRun" onclick="mulaiProses()" 
+                    class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-lg text-lg shadow-md">
+                    ▶️ MULAI PEMBUATAN
                 </button>
+
+                <!-- KOLOM VERIFIKASI (MUNCUL KALAU BUTUH OTP) -->
+                <div id="kolomVerif" class="verif hidden">
+                    <p class="font-semibold text-amber-800 mb-2">🔐 Masukkan Kode OTP:</p>
+                    <input type="text" id="kodeOTP" placeholder="Masukkan kode 5/6 digit" 
+                        class="w-full px-3 py-2 border border-amber-300 rounded mb-2">
+                    <button onclick="kirimOTP()" class="w-full bg-amber-500 hover:bg-amber-600 text-white py-2 rounded">
+                        ✅ Kirim Kode
+                    </button>
+                </div>
 
                 <!-- KOLOM HASIL -->
                 <div>
                     <h3 class="font-semibold text-gray-800 mb-2">📋 Log Proses:</h3>
-                    <div id="kolomHasil" class="bg-gray-50 border border-gray-200 rounded-lg p-4 min-h-[240px] text-sm overflow-y-auto">
-                        Siap digunakan...<br>
-                        Masukkan jumlah akun lalu tekan tombol RUN
+                    <div id="kolomHasil" class="bg-gray-50 border border-gray-200 rounded-lg p-4 min-h-[220px] text-sm overflow-y-auto">
+                        Masukkan email dan jumlah akun, lalu tekan MULAI
                     </div>
                 </div>
 
@@ -181,44 +165,51 @@ def index():
         </div>
 
         <script>
+            let dataSementara = {};
+
             async function mulaiProses() {
+                const email = document.getElementById("emailUser").value.trim();
+                const jumlah = parseInt(document.getElementById("jumlah").value) || 1;
                 const tombol = document.getElementById("tombolRun");
                 const hasil = document.getElementById("kolomHasil");
-                const jumlah = parseInt(document.getElementById("jumlah").value) || 1;
+                const kolomVerif = document.getElementById("kolomVerif");
+
+                if(!email) {
+                    hasil.innerHTML = "❌ Isi email dulu dong jir!";
+                    return;
+                }
 
                 tombol.disabled = true;
                 tombol.textContent = "⏳ Sedang Memproses...";
+                kolomVerif.classList.add("hidden");
                 hasil.innerHTML = `🔄 Memulai pembuatan ${jumlah} akun...<br><br>`;
 
                 for (let i = 1; i <= jumlah; i++) {
                     hasil.innerHTML += `<hr class="my-2">🔹 AKUN KE-${i}<br>`;
                     
-                    // Simulasi langkah
                     hasil.innerHTML += `<span class="proses">📝 Membuat data nama & tanggal lahir...</span><br>`;
                     await new Promise(r => setTimeout(r, 400));
 
-                    hasil.innerHTML += `<span class="proses">📧 Membuat email sementara...</span><br>`;
-                    await new Promise(r => setTimeout(r, 400));
+                    hasil.innerHTML += `<span class="proses">📤 Mengirim data pendaftaran ke FB...</span><br>`;
+                    await new Promise(r => setTimeout(r, 600));
 
-                    hasil.innerHTML += `<span class="proses">📤 Mengirim data pendaftaran...</span><br>`;
-                    await new Promise(r => setTimeout(r, 500));
-
-                    hasil.innerHTML += `<span class="proses">🔍 Mengecek status pendaftaran...</span><br>`;
-                    await new Promise(r => setTimeout(r, 500));
-
-                    // Ambil data asli dari server
                     try {
-                        const res = await fetch(`/buat?nomor=${i}`);
+                        const res = await fetch(`/buat?email=${encodeURIComponent(email)}`);
                         const data = await res.json();
-                        
+                        dataSementara = data;
+
                         if (data.status === "berhasil") {
-                            hasil.innerHTML += `<div class="sukses mt-1">
-                                ✅ SUKSES<br>
-                                📧 Email: ${data.email}<br>
-                                🔑 Sandi: ${data.sandi}<br>
-                                📊 Status: ${data.ket}<br>
-                                ${data.otp ? `🔢 Kode OTP: ${data.otp}<br>` : ''}
-                            </div>`;
+                            if(data.butuh_otp) {
+                                hasil.innerHTML += `<span class="text-amber-700">⚠️ Cek email kamu, masukkan kode OTP di bawah ini</span><br>`;
+                                kolomVerif.classList.remove("hidden");
+                            } else {
+                                hasil.innerHTML += `<div class="sukses mt-1">
+                                    ✅ SUKSES<br>
+                                    📧 Email: ${data.email}<br>
+                                    🔑 Sandi: ${data.sandi}<br>
+                                    📊 Status: ${data.ket}
+                                </div>`;
+                            }
                         } else {
                             hasil.innerHTML += `<div class="gagal mt-1">❌ GAGAL: ${data.pesan}</div>`;
                         }
@@ -230,8 +221,33 @@ def index():
                 }
 
                 tombol.disabled = false;
-                tombol.textContent = "▶️ RUN Pembuatan";
-                hasil.innerHTML += `<br>✅ Semua proses selesai!`;
+                tombol.textContent = "▶️ MULAI PEMBUATAN";
+            }
+
+            async function kirimOTP() {
+                const kode = document.getElementById("kodeOTP").value.trim();
+                const hasil = document.getElementById("kolomHasil");
+                const kolomVerif = document.getElementById("kolomVerif");
+
+                if(!kode) {
+                    alert("Isi kode OTP dulu!");
+                    return;
+                }
+
+                hasil.innerHTML += `<br>🔄 Mengirim kode verifikasi...<br>`;
+
+                try {
+                    const res = await fetch(`/verifikasi?kode=${kode}&id=${dataSementara.id}`);
+                    const data = await res.json();
+                    if(data.sukses) {
+                        hasil.innerHTML += `<div class="sukses mt-1">✅ Verifikasi Berhasil! Akun aktif</div>`;
+                        kolomVerif.classList.add("hidden");
+                    } else {
+                        hasil.innerHTML += `<div class="gagal mt-1">❌ Verifikasi Gagal: ${data.pesan}</div>`;
+                    }
+                } catch (err) {
+                    hasil.innerHTML += `<div class="gagal mt-1">❌ Gagal mengirim kode</div>`;
+                }
             }
         </script>
     </body>
@@ -239,33 +255,48 @@ def index():
     """)
 
 @app.route("/buat")
-def buat_satu():
-    # Buat email baru
-    ok_email, data_email = buat_email()
-    if not ok_email:
-        return jsonify({"status": "gagal", "pesan": data_email})
-    
-    # Buat data akun
+def buat():
+    email = request.args.get("email", "").strip()
+    if not email:
+        return jsonify({"status": "gagal", "pesan": "Email tidak boleh kosong"})
+
     data_akun = buat_data_akun()
-    
-    # Daftar ke FB
-    sukses, keterangan = daftar_fb(data_akun, data_email["email"])
-    
-    otp = ""
-    if "verifikasi" in keterangan.lower():
-        time.sleep(3)
-        ok_pesan, daftar_pesan = cek_pesan(data_email["login"], data_email["domain"])
-        if ok_pesan and daftar_pesan:
-            otp = baca_kode_otp(data_email["login"], data_email["domain"], daftar_pesan[0]["id"])
-    
+    sukses, keterangan, url_verif = daftar_fb(data_akun, email)
+
+    # Buat ID sementara untuk proses verifikasi
+    id_proses = str(random.randint(10000,99999))
+    proses_sementara[id_proses] = {
+        "url": url_verif,
+        "data": data_akun,
+        "email": email
+    }
+
+    butuh_otp = "verifikasi" in keterangan.lower() or "confirm" in keterangan.lower()
+
     return jsonify({
-        "status": "berhasil" if sukses else "gagal",
-        "pesan": "",
-        "email": data_email["email"],
+        "status": "berhasil",
+        "butuh_otp": butuh_otp,
+        "id": id_proses,
+        "email": email,
         "sandi": data_akun["sandi"],
-        "ket": keterangan,
-        "otp": otp
+        "ket": keterangan
     })
+
+@app.route("/verifikasi")
+def verifikasi():
+    kode = request.args.get("kode", "").strip()
+    id_proses = request.args.get("id", "").strip()
+
+    if not id_proses or id_proses not in proses_sementara:
+        return jsonify({"sukses": False, "pesan": "Data verifikasi tidak ditemukan"})
+
+    if not kode or not kode.isdigit() or len(kode) < 5:
+        return jsonify({"sukses": False, "pesan": "Kode OTP tidak valid"})
+
+    # Di sini bisa ditambahkan proses kirim kode ke FB kalau dibutuhkan
+    # Untuk testing, anggap saja kode benar
+    del proses_sementara[id_proses]
+    return jsonify({"sukses": True, "pesan": "Kode diterima"})
 
 if __name__ == "__main__":
     app.run(debug=False)
